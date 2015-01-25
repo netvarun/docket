@@ -4,12 +4,16 @@ import (
 	"fmt"
 	"github.com/alecthomas/kingpin"
 	"github.com/codegangsta/martini"
+	"github.com/jackpal/Taipei-Torrent/torrent"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 )
+
+//TODO:
+//Store image metadata in some db
 
 var (
 	host = kingpin.Flag("host", "Set host of docket registry.").Short('h').Default("127.0.0.1").IP()
@@ -37,11 +41,24 @@ func postImage(w http.ResponseWriter, r *http.Request) (int, string) {
 	file, header, err := r.FormFile("file")
 	defer file.Close()
 
+	//Get metadata
+	image := r.Header.Get("image")
+	id := r.Header.Get("id")
+	created := r.Header.Get("created")
+	fileName := header.Filename
+
+	fmt.Println("Got image: ", image, " id = ", id, " created = ", created, " filename = ", fileName)
+
+	s := []string{"/tmp/dlds/", fileName}
+	t := []string{"/tmp/dlds/", fileName, ".torrent"}
+	filePath := strings.Join(s, "")
+	torrentPath := strings.Join(t, "")
+
 	if err != nil {
 		return 500, "failed"
 	}
 
-	out, err := os.Create("/tmp/file")
+	out, err := os.Create(filePath)
 	if err != nil {
 		return 500, "also failed"
 	}
@@ -51,9 +68,10 @@ func postImage(w http.ResponseWriter, r *http.Request) (int, string) {
 		fmt.Fprintln(w, err)
 	}
 
-	// the header contains useful info, like the original file name
-	//fmt.Fprintf(w, "File %s uploaded successfully.", header.Filename)
-	fmt.Println("header = ", header.Filename)
+	err = createTorrentFile(torrentPath, filePath, "10.240.32.50:8940")
+	if err != nil {
+		return 500, "torrent creation failed"
+	}
 
 	return http.StatusOK, "success"
 }
@@ -63,6 +81,27 @@ func doTest(params martini.Params, w http.ResponseWriter) (int, string) {
 	w.Header().Set("Content-Type", "application/json")
 
 	return http.StatusOK, resource
+}
+
+func createTorrentFile(torrentFileName, root, announcePath string) (err error) {
+	var metaInfo *torrent.MetaInfo
+	metaInfo, err = torrent.CreateMetaInfoFromFileSystem(nil, root, 0, false)
+	if err != nil {
+		return
+	}
+	metaInfo.Announce = "http://10.240.32.50:8940/announce"
+	metaInfo.CreatedBy = "docket-registry"
+	var torrentFile *os.File
+	torrentFile, err = os.Create(torrentFileName)
+	if err != nil {
+		return
+	}
+	defer torrentFile.Close()
+	err = metaInfo.Bencode(torrentFile)
+	if err != nil {
+		return
+	}
+	return
 }
 
 /*
