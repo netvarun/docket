@@ -6,7 +6,6 @@ import (
 	"github.com/alecthomas/kingpin"
 	"github.com/codegangsta/martini"
 	"github.com/jackpal/Taipei-Torrent/torrent"
-	//"github.com/steveyen/gkvlite"
 	"io"
 	"io/ioutil"
 	"log"
@@ -23,6 +22,7 @@ var (
 )
 
 // The one and only martini instance.
+var store *Store
 var m *martini.Martini
 
 func init() {
@@ -66,6 +66,15 @@ func postImage(w http.ResponseWriter, r *http.Request) (int, string) {
 	torrentFile := fileName + ".torrent"
 	torrentPath := strings.Join(t, "")
 
+	//JSON string of metadata
+	imageMeta := map[string]string{
+		"image":    image,
+		"id":       id,
+		"created":  created,
+		"fileName": fileName,
+	}
+	imageMetaJson, _ := json.Marshal(imageMeta)
+
 	out, err := os.Create(filePath)
 	if err != nil {
 		fmt.Println(err)
@@ -88,14 +97,20 @@ func postImage(w http.ResponseWriter, r *http.Request) (int, string) {
 		return 500, "torrent creation failed"
 	}
 
+	//Write to datastore
+	err = writeToStore(store, "docket", image, string(imageMetaJson))
+	if err != nil {
+		fmt.Println("Error writing result: ", err)
+	}
+
 	//Seed the torrent
 	fmt.Println("Seeding torrent in the background...")
 	os.Chdir(loc)
 	importCmd := fmt.Sprintf("ctorrent -d -e 9999 %s", torrentFile)
-	_, err1 := exec.Command("sh", "-c", importCmd).Output()
-	if err1 != nil {
+	_, err2 := exec.Command("sh", "-c", importCmd).Output()
+	if err2 != nil {
 		fmt.Printf("Failed to seed torrent..")
-		fmt.Println(err1)
+		fmt.Println(err2)
 		return 500, "bad"
 	}
 
@@ -111,15 +126,40 @@ func getTorrent(w http.ResponseWriter, r *http.Request) int {
 		return 500
 	}
 
-	image := queryObj["image"]
-	fmt.Println("image = ", image)
-	//TODO:
-	//Query db and find if image exists. If not throw error
-	//If exists, find location to torrent
-	//Check if file exists
+	imageInterface := queryObj["image"]
+	image := imageInterface.(string)
 
-	filepath := "/tmp/dlds/353b94eb357ddb343ebe054ccc80b49bb6d0828522e9f2eff313406363449d17_netvarun_test_latest.tar.torrent"
-	file, err := ioutil.ReadFile(filepath)
+	//Query db and find if image exists. If not throw error (done)
+	jsonVal, err := getFromStore(store, "docket", image)
+	if err != nil {
+		fmt.Println("Error reading from file : %v\n", err)
+		return 500
+	}
+
+	if jsonVal == "" {
+		fmt.Println("Invalid image requested")
+		return 500
+	}
+
+	//Unmarshall
+	var imageObj map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonVal), &imageObj); err != nil {
+		return 500
+	}
+
+	//find location to torrent
+	torrentFileInterface := imageObj["fileName"]
+	torrentFile := torrentFileInterface.(string)
+
+	torrentPath := *location + "/" + torrentFile
+	//Check if file exists
+	if _, err := os.Stat(torrentPath); os.IsNotExist(err) {
+		fmt.Println("no such file or directory: %s", torrentPath)
+		return 500
+	}
+
+	//set filepath to that
+	file, err := ioutil.ReadFile(torrentPath)
 	if err != nil {
 		return 500
 	}
@@ -167,6 +207,14 @@ List out all images, metadata and torrent file
 func main() {
 	kingpin.CommandLine.Help = "Docket Registry"
 	kingpin.Parse()
+
+	var storeErr error
+
+	store, storeErr = openStore()
+	if storeErr != nil {
+		log.Fatal("Failed to open data store: %v", storeErr)
+	}
+	deferCloseStore(store)
 
 	if err := http.ListenAndServe(":8000", m); err != nil {
 		log.Fatal(err)
