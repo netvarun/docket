@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	host     = kingpin.Flag("host", "Set host and port of bittorrent tracker. Example: -host 10.240.101.85:8940 Note: This cannot be set to localhost, since this is the tracker in which all the torrents will be created with. They have to be some accessible ip address from outside").Short('h').Default("10.240.101.85:8940").String()
-	port     = kingpin.Flag("port", "Set port of docket registry.").Short('p').Default("9090").Int()
+	tracker  = kingpin.Flag("tracker", "Set host and port of bittorrent tracker. Example: -host 10.240.101.85:8940 Note: This cannot be set to localhost, since this is the tracker in which all the torrents will be created with. They have to be some accessible ip address from outside").Short('t').Default("10.240.101.85:8940").String()
+	port     = kingpin.Flag("port", "Set port of docket registry.").Short('p').Default("8000").String()
 	location = kingpin.Flag("location", "Set location to save torrents and docker images.").Short('l').Default("/var/local/docket").String()
 )
 
@@ -93,7 +93,8 @@ func postImage(w http.ResponseWriter, r *http.Request) (int, string) {
 
 	fmt.Println("File uploaded successfully")
 
-	btHost := *host
+	btHost := *tracker
+	fmt.Println("btHost = ", btHost)
 	err = createTorrentFile(torrentPath, filePath, btHost)
 	if err != nil {
 		return 500, "torrent creation failed"
@@ -228,7 +229,7 @@ func createTorrentFile(torrentFileName, root, announcePath string) (err error) {
 	if err != nil {
 		return
 	}
-	btHost := *host
+	btHost := *tracker
 	metaInfo.Announce = "http://" + btHost + "/announce"
 	metaInfo.CreatedBy = "docket-registry"
 	var torrentFile *os.File
@@ -261,7 +262,9 @@ func main() {
 	}
 	deferCloseStore(store)
 
-	if err := http.ListenAndServe(":8000", m); err != nil {
+	pString := ":" + *port
+
+	if err := http.ListenAndServe(pString, m); err != nil {
 		log.Fatal(err)
 	}
 }
