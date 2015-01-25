@@ -6,20 +6,20 @@ import (
 	"github.com/alecthomas/kingpin"
 	"github.com/codegangsta/martini"
 	"github.com/jackpal/Taipei-Torrent/torrent"
+	//"github.com/steveyen/gkvlite"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 )
 
-//TODO:
-//Store image metadata in some db
-
 var (
-	host = kingpin.Flag("host", "Set host of docket registry.").Short('h').Default("127.0.0.1").IP()
-	port = kingpin.Flag("port", "Set port of docket registry.").Short('p').Default("9090").Int()
+	host     = kingpin.Flag("host", "Set host of docket registry.").Short('h').Default("127.0.0.1").IP()
+	port     = kingpin.Flag("port", "Set port of docket registry.").Short('p').Default("9090").Int()
+	location = kingpin.Flag("location", "Set location to save torrents and docker images.").Short('l').Default("/tmp/dlds").String()
 )
 
 // The one and only martini instance.
@@ -30,7 +30,6 @@ func init() {
 	// Setup routes
 	r := martini.NewRouter()
 	r.Post(`/images`, postImage)
-	r.Get(`/test/:resource`, doTest)
 	r.Get(`/torrents`, getTorrent)
 	//r.Get(`/images`, getImages)
 	// Add the router action
@@ -39,6 +38,9 @@ func init() {
 
 func postImage(w http.ResponseWriter, r *http.Request) (int, string) {
 	w.Header().Set("Content-Type", "application/json")
+
+	loc := *location
+	fmt.Println("location, ", loc)
 
 	// the FormFile function takes in the POST input id file
 	file, header, err := r.FormFile("file")
@@ -58,9 +60,10 @@ func postImage(w http.ResponseWriter, r *http.Request) (int, string) {
 
 	fmt.Println("Got image: ", image, " id = ", id, " created = ", created, " filename = ", fileName)
 
-	s := []string{"/tmp/dlds/", fileName}
-	t := []string{"/tmp/dlds/", fileName, ".torrent"}
+	s := []string{loc, "/", fileName}
+	t := []string{loc, "/", fileName, ".torrent"}
 	filePath := strings.Join(s, "")
+	torrentFile := fileName + ".torrent"
 	torrentPath := strings.Join(t, "")
 
 	out, err := os.Create(filePath)
@@ -85,14 +88,18 @@ func postImage(w http.ResponseWriter, r *http.Request) (int, string) {
 		return 500, "torrent creation failed"
 	}
 
+	//Seed the torrent
+	fmt.Println("Seeding torrent in the background...")
+	os.Chdir(loc)
+	importCmd := fmt.Sprintf("ctorrent -d -e 9999 %s", torrentFile)
+	_, err1 := exec.Command("sh", "-c", importCmd).Output()
+	if err1 != nil {
+		fmt.Printf("Failed to seed torrent..")
+		fmt.Println(err1)
+		return 500, "bad"
+	}
+
 	return http.StatusOK, "{\"status\":\"OK\"}"
-}
-
-func doTest(params martini.Params, w http.ResponseWriter) (int, string) {
-	resource := strings.ToLower(params["resource"])
-	w.Header().Set("Content-Type", "application/json")
-
-	return http.StatusOK, resource
 }
 
 func getTorrent(w http.ResponseWriter, r *http.Request) int {
@@ -159,7 +166,7 @@ List out all images, metadata and torrent file
 
 func main() {
 	kingpin.CommandLine.Help = "Docket Registry"
-	fmt.Println("Docket Registry")
+	kingpin.Parse()
 
 	if err := http.ListenAndServe(":8000", m); err != nil {
 		log.Fatal(err)

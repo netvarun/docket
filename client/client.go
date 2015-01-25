@@ -10,6 +10,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/alecthomas/kingpin"
@@ -18,6 +19,7 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,7 +40,7 @@ var (
 )
 
 // Creates a new tarball upload http request to the Docket registry
-func newfileUploadRequest(params map[string]string, paramName, path string) (*http.Request, error) {
+func uploadFile(params map[string]string, paramName, path string) (*http.Request, error) {
 	uri := *host + ":" + *port + "/images"
 	file, err := os.Open(path)
 	if err != nil {
@@ -130,7 +132,8 @@ func applyPush(image string) error {
 		"created": created,
 	}
 
-	request, err := newfileUploadRequest(imageParams, "file", filePath)
+	//Adapted from http://matt.aimonetti.net/posts/2013/07/01/golang-multipart-file-upload-example/ (C) Matt Aimonetti
+	request, err := uploadFile(imageParams, "file", filePath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -153,10 +156,73 @@ func applyPush(image string) error {
 	return nil
 }
 
+//Adapted from https://github.com/thbar/golang-playground/blob/master/download-files.go
+func downloadFromUrl(url string, fileName string) (err error) {
+	output, err := os.Create(fileName)
+	if err != nil {
+		fmt.Println("Error while creating", fileName, "-", err)
+		return err
+	}
+	defer output.Close()
+
+	response, err := http.Get(url)
+	if err != nil {
+		fmt.Println("Error while downloading", url, "-", err)
+		return err
+	}
+	defer response.Body.Close()
+
+	n, err := io.Copy(output, response.Body)
+	if err != nil {
+		fmt.Println("Error while downloading", url, "-", err)
+		return err
+	}
+
+	fmt.Println(n, "bytes downloaded.")
+	return nil
+}
+
 func applyPull(image string) error {
-	fmt.Println("image = ", image)
-	fmt.Println("host = ", host)
-	fmt.Println("port = ", port)
+	reg, err := regexp.Compile("[^A-Za-z0-9]+")
+	if err != nil {
+		return err
+	}
+	safeImageName := reg.ReplaceAllString(image, "_")
+	filePath := "/tmp/docket/"
+	fileName := filePath + safeImageName + ".torrent"
+
+	//Download torrent file
+	queryParam := map[string]string{
+		"image": image,
+	}
+	queryParamJson, _ := json.Marshal(queryParam)
+
+	fmt.Println("Downloading the torrent file for image: ", image)
+
+	url := *host + ":" + *port + "/torrents?q=" + url.QueryEscape(string(queryParamJson))
+	err1 := downloadFromUrl(url, fileName)
+	if err1 != nil {
+		return err
+	}
+
+	fmt.Println("Downloading from the torrent file...")
+	ctorrentCmd := fmt.Sprintf("cd %s && ctorrent -e 0 %s", filePath, fileName)
+	cmd := exec.Command("bash", "-c", ctorrentCmd)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Run()
+
+	tarballPath := filePath + "353b94eb357ddb343ebe054ccc80b49bb6d0828522e9f2eff313406363449d17_netvarun_test_latest.tar"
+
+	//Load the downloaded tarball
+	fmt.Println("Exporting image to tarball...")
+	importCmd := fmt.Sprintf("docker load -i %s", tarballPath)
+	_, err2 := exec.Command("sh", "-c", importCmd).Output()
+	if err2 != nil {
+		fmt.Printf("Failed to load image into docker!")
+		return err2
+	}
+	fmt.Printf("Successfively pulled image: ", image)
 	return nil
 }
 
@@ -167,6 +233,6 @@ func main() {
 	case "push":
 		kingpin.FatalIfError(applyPush(*pushImage), "Pushing of image failed")
 	case "pull":
-		kingpin.FatalIfError(applyPush((*pushImage)), "Pushing of image failed")
+		kingpin.FatalIfError(applyPull((*pullImage)), "Pushing of image failed")
 	}
 }
