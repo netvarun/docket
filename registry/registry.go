@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/alecthomas/kingpin"
 	"github.com/codegangsta/martini"
 	"github.com/jackpal/Taipei-Torrent/torrent"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -29,7 +31,7 @@ func init() {
 	r := martini.NewRouter()
 	r.Post(`/images`, postImage)
 	r.Get(`/test/:resource`, doTest)
-	//r.Post(`/torrents/:image`, getTorrent)
+	r.Get(`/torrents`, getTorrent)
 	//r.Get(`/images`, getImages)
 	// Add the router action
 	m.Action(r.Handle)
@@ -83,7 +85,7 @@ func postImage(w http.ResponseWriter, r *http.Request) (int, string) {
 		return 500, "torrent creation failed"
 	}
 
-	return http.StatusOK, "success"
+	return http.StatusOK, "{\"status\":\"OK\"}"
 }
 
 func doTest(params martini.Params, w http.ResponseWriter) (int, string) {
@@ -91,6 +93,37 @@ func doTest(params martini.Params, w http.ResponseWriter) (int, string) {
 	w.Header().Set("Content-Type", "application/json")
 
 	return http.StatusOK, resource
+}
+
+func getTorrent(w http.ResponseWriter, r *http.Request) int {
+	query := r.URL.Query()
+	queryJson := query.Get("q")
+
+	var queryObj map[string]interface{}
+	if err := json.Unmarshal([]byte(queryJson), &queryObj); err != nil {
+		return 500
+	}
+
+	image := queryObj["image"]
+	fmt.Println("image = ", image)
+	//TODO:
+	//Query db and find if image exists. If not throw error
+	//If exists, find location to torrent
+	//Check if file exists
+
+	filepath := "/tmp/dlds/353b94eb357ddb343ebe054ccc80b49bb6d0828522e9f2eff313406363449d17_netvarun_test_latest.tar.torrent"
+	file, err := ioutil.ReadFile(filepath)
+	if err != nil {
+		return 500
+	}
+
+	w.Header().Set("Content-Type", "application/x-bittorrent")
+	if file != nil {
+		w.Write(file)
+		return http.StatusOK
+	}
+
+	return 500
 }
 
 func createTorrentFile(torrentFileName, root, announcePath string) (err error) {
