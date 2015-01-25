@@ -38,7 +38,14 @@ func init() {
 func postImage(w http.ResponseWriter, r *http.Request) (int, string) {
 	w.Header().Set("Content-Type", "application/json")
 
+	// the FormFile function takes in the POST input id file
 	file, header, err := r.FormFile("file")
+
+	if err != nil {
+		fmt.Println(err)
+		return 500, "bad"
+	}
+
 	defer file.Close()
 
 	//Get metadata
@@ -54,21 +61,24 @@ func postImage(w http.ResponseWriter, r *http.Request) (int, string) {
 	filePath := strings.Join(s, "")
 	torrentPath := strings.Join(t, "")
 
-	if err != nil {
-		return 500, "failed"
-	}
-
 	out, err := os.Create(filePath)
 	if err != nil {
-		return 500, "also failed"
-	}
-	defer out.Close()
-	_, err = io.Copy(out, file)
-	if err != nil {
-		fmt.Fprintln(w, err)
+		fmt.Println(err)
+		return 500, "bad"
 	}
 
-	err = createTorrentFile(torrentPath, filePath, "10.240.32.50:8940")
+	defer out.Close()
+
+	// write the content from POST to the file
+	_, err = io.Copy(out, file)
+	if err != nil {
+		fmt.Println(err)
+		return 500, "bad"
+	}
+
+	fmt.Println("File uploaded successfully")
+
+	err = createTorrentFile(torrentPath, filePath, "10.240.101.85:8940")
 	if err != nil {
 		return 500, "torrent creation failed"
 	}
@@ -89,7 +99,7 @@ func createTorrentFile(torrentFileName, root, announcePath string) (err error) {
 	if err != nil {
 		return
 	}
-	metaInfo.Announce = "http://10.240.32.50:8940/announce"
+	metaInfo.Announce = "http://10.240.101.85:8940/announce"
 	metaInfo.CreatedBy = "docket-registry"
 	var torrentFile *os.File
 	torrentFile, err = os.Create(torrentFileName)
