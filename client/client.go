@@ -78,9 +78,36 @@ func applyPush(image string) error {
 	}
 
 	fmt.Println("Successively exported tarball...")
-	//file writing
-	//making http post request with body contents
 	//make post request with contents of tarball to docket registry
+
+	req, err2 := http.NewRequest("POST", (*postURL).String(), nil)
+	if err2 != nil {
+		return err2
+	}
+	if len(*postData) > 0 {
+		for key, value := range *postData {
+			req.Form.Set(key, value)
+		}
+	} else if postBinaryFile != nil {
+		if headers.Get("Content-Type") != "" {
+			headers.Set("Content-Type", "application/octet-stream")
+		}
+		req.Body = *postBinaryFile
+	} else {
+		return errors.New("--data or --data-binary must be provided to POST")
+	}
+
+	req.Header = *headers
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return fmt.Errorf("HTTP request failed: %s", resp.Status)
+	}
+	_, err = io.Copy(os.Stdout, resp.Body)
+	return err
 
 	return nil
 }
