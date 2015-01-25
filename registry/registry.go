@@ -31,7 +31,8 @@ func init() {
 	r := martini.NewRouter()
 	r.Post(`/images`, postImage)
 	r.Get(`/torrents`, getTorrent)
-	//r.Get(`/images`, getImages)
+	r.Get(`/images/all`, getImagesList)
+	r.Get(`/images`, getImages)
 	// Add the router action
 	m.Action(r.Handle)
 }
@@ -149,7 +150,7 @@ func getTorrent(w http.ResponseWriter, r *http.Request) int {
 
 	//find location to torrent
 	torrentFileInterface := imageObj["fileName"]
-	torrentFile := torrentFileInterface.(string)
+	torrentFile := torrentFileInterface.(string) + ".torrent"
 
 	torrentPath := *location + "/" + torrentFile
 	//Check if file exists
@@ -173,6 +174,53 @@ func getTorrent(w http.ResponseWriter, r *http.Request) int {
 	return 500
 }
 
+func getImages(w http.ResponseWriter, r *http.Request) (int, string) {
+	query := r.URL.Query()
+	queryJson := query.Get("q")
+
+	var queryObj map[string]interface{}
+	if err := json.Unmarshal([]byte(queryJson), &queryObj); err != nil {
+		return 500, ""
+	}
+
+	imageInterface := queryObj["image"]
+	image := imageInterface.(string)
+
+	fmt.Println("image = ", image)
+
+	//Query db and find if image exists. If not throw error (done)
+	jsonVal, err := getFromStore(store, "docket", image)
+	if err != nil {
+		fmt.Println("Error reading from file : %v\n", err)
+		return 500, ""
+	}
+
+	if jsonVal == "" {
+		fmt.Println("Invalid image requested")
+		return 500, ""
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	return http.StatusOK, jsonVal
+}
+
+func getImagesList(w http.ResponseWriter, r *http.Request) (int, string) {
+	//Query db and find if image exists. If not throw error (done)
+	keys, err := iterateStore(store, "docket")
+	if err != nil {
+		fmt.Println("Error reading from file : %v\n", err)
+		return 500, ""
+	}
+
+	if keys == "" {
+		fmt.Println("Invalid image requested")
+		return 500, ""
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	return http.StatusOK, keys
+}
+
 func createTorrentFile(torrentFileName, root, announcePath string) (err error) {
 	var metaInfo *torrent.MetaInfo
 	metaInfo, err = torrent.CreateMetaInfoFromFileSystem(nil, root, 0, false)
@@ -193,16 +241,6 @@ func createTorrentFile(torrentFileName, root, announcePath string) (err error) {
 	}
 	return
 }
-
-/*
-- POST /images
-receives data and writes to file
-generates torrent and saves to file
-- GET /torrents?q={"image":}
-Retrieve the torrent file
-- GET /images
-List out all images, metadata and torrent file
-*/
 
 func main() {
 	kingpin.CommandLine.Help = "Docket Registry"

@@ -64,3 +64,29 @@ func getFromStore(store *Store, coll string, key string) (string, error) {
 	item := string(itemBytes[:])
 	return item, nil
 }
+
+func iterateStore(store *Store, coll string) (string, error) {
+	log.Printf("Retrieving item from store. Coll: %v\n", coll)
+	result := ""
+	c := store.s.GetCollection(coll)
+	if c == nil {
+		log.Println("Collection doesn't exist")
+		return "", nil
+	}
+	// Iterate through items.
+	err := c.VisitItemsAscend([]byte(""), true, func(i *gkvlite.Item) bool {
+		result += string(i.Key) + "\n"
+		// This visitor callback will be invoked with every item
+		// with key "ford" and onwards, in key-sorted order.
+		// So: "mercedes", "tesla" are visited, in that ascending order,
+		// but not "bmw".
+		// If we want to stop visiting, return false;
+		// otherwise return true to keep visiting.
+		return true
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return result, nil
+}
