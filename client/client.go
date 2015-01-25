@@ -16,6 +16,7 @@ import (
 	"github.com/alecthomas/kingpin"
 	"github.com/fsouza/go-dockerclient"
 	"io"
+	"io/ioutil"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -170,6 +171,10 @@ func downloadFromUrl(url string, fileName string) (err error) {
 		fmt.Println("Error while downloading", url, "-", err)
 		return err
 	}
+	if response.StatusCode != 200 {
+		fmt.Println("Failed to pull image")
+		return errors.New("Failed to pull image...")
+	}
 	defer response.Body.Close()
 
 	n, err := io.Copy(output, response.Body)
@@ -178,7 +183,11 @@ func downloadFromUrl(url string, fileName string) (err error) {
 		return err
 	}
 
-	fmt.Println(n, "bytes downloaded.")
+	//fmt.Println(n, "bytes downloaded.")
+	//Hack: trivial check to ensure if file downloaded is too small
+	if n < 100 {
+		return errors.New("Failed to pull image...")
+	}
 	return nil
 }
 
@@ -197,11 +206,38 @@ func applyPull(image string) error {
 	}
 	queryParamJson, _ := json.Marshal(queryParam)
 
+	metaUrl := *host + ":" + *port + "/images?q=" + url.QueryEscape(string(queryParamJson))
+	//TODO:Get metadata GET /images?q={"image":}
+	response, err3 := http.Get(metaUrl)
+	if err3 != nil {
+		fmt.Println("Failed to query image metadata endpoint")
+		return err3
+	}
+	if response.StatusCode != 200 {
+		fmt.Println("Failed to get image metadata")
+		return errors.New("Failed to get images metadata...")
+	}
+	defer response.Body.Close()
+	metaJson, err4 := ioutil.ReadAll(response.Body)
+	if err4 != nil {
+		fmt.Println("Failed to get image metadata json")
+		return errors.New("Failed to get image metadata json")
+	}
+
+	var queryObj map[string]interface{}
+	if err := json.Unmarshal([]byte(metaJson), &queryObj); err != nil {
+		return errors.New("Failed to decode images metadata json...")
+	}
+
+	tarballNameInterface := queryObj["fileName"]
+	tarballName := tarballNameInterface.(string)
+
 	fmt.Println("Downloading the torrent file for image: ", image)
 
 	url := *host + ":" + *port + "/torrents?q=" + url.QueryEscape(string(queryParamJson))
 	err1 := downloadFromUrl(url, fileName)
 	if err1 != nil {
+		fmt.Println("Failed to pull image")
 		return err
 	}
 
@@ -212,7 +248,9 @@ func applyPull(image string) error {
 	cmd.Stderr = os.Stderr
 	cmd.Run()
 
-	tarballPath := filePath + "353b94eb357ddb343ebe054ccc80b49bb6d0828522e9f2eff313406363449d17_netvarun_test_latest.tar"
+	//TODO:Replace filename with that from metadata
+	tarballPath := filePath + tarballName
+	fmt.Println("Tarball path = ", tarballPath)
 
 	//Load the downloaded tarball
 	fmt.Println("Exporting image to tarball...")
