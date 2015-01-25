@@ -30,8 +30,9 @@ import (
 )
 
 var (
-	host = kingpin.Flag("host", "Set host of docket registry.").Short('h').Default("http://127.0.0.1").String()
-	port = kingpin.Flag("port", "Set port of docket registry.").Short('p').Default("8000").String()
+	host     = kingpin.Flag("host", "Set host of docket registry.").Short('h').Default("http://127.0.0.1").String()
+	port     = kingpin.Flag("port", "Set port of docket registry.").Short('p').Default("8000").String()
+	location = kingpin.Flag("location", "Set location to store torrents and tarballs.").Short('l').Default("/tmp/docket").String()
 
 	push      = kingpin.Command("push", "Push to the docket registry.")
 	pushImage = push.Arg("push", "Image to push.").Required().String()
@@ -83,6 +84,11 @@ func applyPush(image string) error {
 		return err
 	}
 
+	loc := *location
+	if _, err := os.Stat(loc); os.IsNotExist(err) {
+		os.Mkdir(loc, 0644)
+	}
+
 	endpoint := "unix:///var/run/docker.sock"
 	client, _ := docker.NewClient(endpoint)
 	imgs, _ := client.ListImages(docker.ListImagesOptions{All: false})
@@ -107,7 +113,7 @@ func applyPush(image string) error {
 				fmt.Println("VirtualSize: ", img.VirtualSize)
 				fmt.Println("ParentId: ", img.ParentID)
 				safeImageName := reg.ReplaceAllString(image, "_")
-				s := []string{"/tmp/", imageId, "_", safeImageName, ".tar"}
+				s := []string{loc, "/", imageId, "_", safeImageName, ".tar"}
 				filePath = strings.Join(s, "")
 				break
 			}
@@ -119,7 +125,7 @@ func applyPush(image string) error {
 
 	//Run export command
 	//command invocation
-	//run docker command save to tar ball in /tmp
+	//run docker command save to tar ball in location
 	fmt.Println("Exporting image to tarball...")
 	cmd := fmt.Sprintf("docker save %s > %s", image, filePath)
 	_, err1 := exec.Command("sh", "-c", cmd).Output()
@@ -187,7 +193,7 @@ func downloadFromUrl(url string, fileName string) (err error) {
 	}
 
 	//fmt.Println(n, "bytes downloaded.")
-	//Hack: trivial check to ensure if file downloaded is too small
+	//Hack: trivial check to ensure if file downloaded is not too small
 	if n < 100 {
 		return errors.New("Failed to pull image...")
 	}
@@ -199,8 +205,14 @@ func applyPull(image string) error {
 	if err != nil {
 		return err
 	}
+
+	loc := *location
+	if _, err := os.Stat(loc); os.IsNotExist(err) {
+		os.Mkdir(loc, 0644)
+	}
+
 	safeImageName := reg.ReplaceAllString(image, "_")
-	filePath := "/tmp/docket/"
+	filePath := loc + "/"
 	fileName := filePath + safeImageName + ".torrent"
 
 	//Download torrent file
@@ -210,7 +222,6 @@ func applyPull(image string) error {
 	queryParamJson, _ := json.Marshal(queryParam)
 
 	metaUrl := *host + ":" + *port + "/images?q=" + url.QueryEscape(string(queryParamJson))
-	//TODO:Get metadata GET /images?q={"image":}
 	response, err3 := http.Get(metaUrl)
 	if err3 != nil {
 		fmt.Println("Failed to query image metadata endpoint")

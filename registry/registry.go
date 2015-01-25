@@ -16,9 +16,9 @@ import (
 )
 
 var (
-	host     = kingpin.Flag("host", "Set host of docket registry.").Short('h').Default("127.0.0.1").IP()
+	host     = kingpin.Flag("host", "Set host and port of bittorrent tracker. Example: -host 10.240.101.85:8940 Note: This cannot be set to localhost, since this is the tracker in which all the torrents will be created with. They have to be some accessible ip address from outside").Short('h').Default("10.240.101.85:8940").String()
 	port     = kingpin.Flag("port", "Set port of docket registry.").Short('p').Default("9090").Int()
-	location = kingpin.Flag("location", "Set location to save torrents and docker images.").Short('l').Default("/tmp/dlds").String()
+	location = kingpin.Flag("location", "Set location to save torrents and docker images.").Short('l').Default("/var/local/docket").String()
 )
 
 // The one and only martini instance.
@@ -93,7 +93,8 @@ func postImage(w http.ResponseWriter, r *http.Request) (int, string) {
 
 	fmt.Println("File uploaded successfully")
 
-	err = createTorrentFile(torrentPath, filePath, "10.240.101.85:8940")
+	btHost := *host
+	err = createTorrentFile(torrentPath, filePath, btHost)
 	if err != nil {
 		return 500, "torrent creation failed"
 	}
@@ -227,7 +228,8 @@ func createTorrentFile(torrentFileName, root, announcePath string) (err error) {
 	if err != nil {
 		return
 	}
-	metaInfo.Announce = "http://10.240.101.85:8940/announce"
+	btHost := *host
+	metaInfo.Announce = "http://" + btHost + "/announce"
 	metaInfo.CreatedBy = "docket-registry"
 	var torrentFile *os.File
 	torrentFile, err = os.Create(torrentFileName)
@@ -245,6 +247,11 @@ func createTorrentFile(torrentFileName, root, announcePath string) (err error) {
 func main() {
 	kingpin.CommandLine.Help = "Docket Registry"
 	kingpin.Parse()
+
+	loc := *location
+	if _, err := os.Stat(loc); os.IsNotExist(err) {
+		os.Mkdir(loc, 0644)
+	}
 
 	var storeErr error
 
