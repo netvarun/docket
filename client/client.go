@@ -5,13 +5,17 @@ package main
 
 //push
 //pull
-//images
 //-h[ost]
 //-p[ort]
 
 import (
+	"errors"
 	"fmt"
 	"github.com/alecthomas/kingpin"
+	"github.com/fsouza/go-dockerclient"
+	"os/exec"
+	"regexp"
+	"strings"
 )
 
 var (
@@ -19,11 +23,69 @@ var (
 	port = kingpin.Flag("port", "Set port of docket registry.").Short('p').Default("9090").Int()
 
 	push      = kingpin.Command("push", "Push to the docket registry.")
-	pushFlag  = push.Flag("test", "Push flag").Bool()
 	pushImage = push.Arg("push", "Image to push.").Required().String()
+
+	pull      = kingpin.Command("pull", "pull to the docket registry.")
+	pullImage = pull.Arg("pull", "Image to pull.").Required().String()
 )
 
 func applyPush(image string) error {
+	reg, err := regexp.Compile("[^A-Za-z0-9]+")
+	if err != nil {
+		return err
+	}
+
+	endpoint := "unix:///var/run/docker.sock"
+	client, _ := docker.NewClient(endpoint)
+	imgs, _ := client.ListImages(docker.ListImagesOptions{All: false})
+
+	found := false
+	tagId := ""
+	filePath := ""
+
+	for _, img := range imgs {
+		tags := img.RepoTags
+		for _, tag := range tags {
+			if tag == image {
+				found = true
+				tagId = img.ID
+				fmt.Println("Found image: ", image)
+				fmt.Println("ID: ", img.ID)
+				fmt.Println("RepoTags: ", img.RepoTags)
+				fmt.Println("Created: ", img.Created)
+				fmt.Println("Size: ", img.Size)
+				fmt.Println("VirtualSize: ", img.VirtualSize)
+				fmt.Println("ParentId: ", img.ParentID)
+				safeImageName := reg.ReplaceAllString(image, "_")
+				s := []string{"/tmp/", tagId, "_", safeImageName, ".tar"}
+				filePath = strings.Join(s, "")
+				break
+			}
+		}
+	}
+	if !found {
+		return errors.New("Sorry the image could not be found.")
+	}
+
+	//Run export command
+	//command invocation
+	//run docker command save to tar ball in /tmp
+	fmt.Println("Exporting image to tarball...")
+	cmd := fmt.Sprintf("docker save %s > %s", image, filePath)
+	output, err1 := exec.Command("sh", "-c", cmd).Output()
+	if err1 != nil {
+		return err1
+	}
+
+	fmt.Println("Successively exported tarball...")
+	//file writing
+	//making http post request with body contents
+	//make post request with contents of tarball to docket registry
+
+	return nil
+}
+
+func applyPull(image string) error {
 	fmt.Println("image = ", image)
 	fmt.Println("host = ", host)
 	fmt.Println("port = ", port)
@@ -32,8 +94,11 @@ func applyPush(image string) error {
 
 func main() {
 	kingpin.CommandLine.Help = "Docket Client"
+
 	switch kingpin.Parse() {
 	case "push":
+		kingpin.FatalIfError(applyPush(*pushImage), "Pushing of image failed")
+	case "pull":
 		kingpin.FatalIfError(applyPush((*pushImage)), "Pushing of image failed")
 	}
 }
