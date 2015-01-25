@@ -38,6 +38,9 @@ var (
 
 	pull      = kingpin.Command("pull", "pull to the docket registry.")
 	pullImage = pull.Arg("pull", "Image to pull.").Required().String()
+
+	imagesCmd = kingpin.Command("images", "display images in the docket registry.")
+	imageFlag = imagesCmd.Flag("images", "display images in the docket registry.").Bool()
 )
 
 // Creates a new tarball upload http request to the Docket registry
@@ -264,6 +267,30 @@ func applyPull(image string) error {
 	return nil
 }
 
+func applyImages() error {
+	imagesUrl := *host + ":" + *port + "/images/all"
+	//TODO:Get metadata GET /images?q={"image":}
+	response, err3 := http.Get(imagesUrl)
+	if err3 != nil {
+		fmt.Println("Failed to query images list endpoint")
+		return err3
+	}
+	if response.StatusCode != 200 {
+		fmt.Println("Failed to get images list")
+		return errors.New("Failed to get images list...")
+	}
+	defer response.Body.Close()
+	imagesList, err4 := ioutil.ReadAll(response.Body)
+	if err4 != nil {
+		fmt.Println("Failed to get images list")
+		return errors.New("Failed to get images list")
+	}
+
+	fmt.Println(string(imagesList))
+
+	return nil
+}
+
 func main() {
 	kingpin.CommandLine.Help = "Docket Client"
 
@@ -271,6 +298,8 @@ func main() {
 	case "push":
 		kingpin.FatalIfError(applyPush(*pushImage), "Pushing of image failed")
 	case "pull":
-		kingpin.FatalIfError(applyPull((*pullImage)), "Pushing of image failed")
+		kingpin.FatalIfError(applyPull((*pullImage)), "Pulling of image failed")
+	case "images":
+		kingpin.FatalIfError(applyImages(), "Listing of images failed")
 	}
 }
