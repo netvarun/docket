@@ -11,6 +11,8 @@ Hence kindly forgive me for the hackish code, and lack of tests.
 
 [On hind sight - container flood or docker rush would have been a better name.]
 
+[Screencast](https://asciinema.org/a/15752)
+
 ## Problem Statement
 
 In 2015, git deploys are soon going to replace docker [or rocket or lxd] deploys.
@@ -32,7 +34,12 @@ Docket constitutes of 3 components:
 
 1. Docket Registry
 
+A REST service that acts as a registry. It receives docker image tarballs from the client, stores metadata into a database,
+creates torrents out of them and seeds them.
+
 2. Docket Client
+
+The client itnerface in which the end user will be interacting. Can view available images in the registry, push an image to the registry and pull an image (which triggers a bittorrent deploy) from the registry.
 
 3. Bittorrent Tracker
 
@@ -198,6 +205,10 @@ Commands:
     display images in the docket registry.
 
 ```
+
+
+
+## (In)Security
 
 ## Author 
 
