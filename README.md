@@ -206,10 +206,6 @@ Commands:
 
 ```
 
-
-
-## (In)Security
-
 ## Author 
 
 Sivamani Varun (varun@semantics3.com)
