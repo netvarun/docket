@@ -5,22 +5,31 @@
 DOCKEr + torrenT = Docket
 
 Docket is a custom docker registry that allows for deployments through bittorrent.
+It allows for lightning fast Docker image deploys across large number of machines.
 
-This was design and built in 48 hours as part of the Gopher Gala Golang 48 hour hackathon.
+This was designed and built in 48 hours as part of the Gopher Gala Golang 48 hour hackathon.
 Hence kindly forgive me for the hackish code, and lack of tests.
 
-[On hind sight - container flood or docker rush would have been a better name.]
+[On hind sight - container rush or docker flood would have been a better name.]
 
 [Screencast](https://asciinema.org/a/15752)
 
 ## Problem Statement
 
-In 2015, git deploys are soon going to replace docker [or rocket or lxd] deploys.
+As containers get more mainstream, server deployments are soon going to be done through a containerization solution like docker [or rocket or lxd].
+
 Large scale deploys are going to choke your docker registry.
+Imagine pulling/deploying a 800mb base image (for example the official perl image) across 200 machines in one go.
+That's 800*200 = 1.6TB of data that's going to be deployed and it'll definitely choke your private docker registry (and will take a while pulling in from the public image)
 
 ## Solution
 
 The solution is BitTorrent. Any technology good for distributing music and movies, is usually good for doing server deploys.
+Instead of downloading from one point source, we can now distribute the load across the machines downloading themselves. All of this transparently and automatically handled by the docket client.
+
+## Silly Totally Non-scientific Benchmark
+
+Pulling a 800 mb image across 5 machines simultaneously via Docket resulted in a 90% speedup.
 
 ## Features
 
