@@ -228,7 +228,7 @@ func createTorrentFile(torrentFileName, root, announcePath string) (err error) {
 	btHost := *tracker
 	metaInfo, err = torrent.CreateMetaInfoFromFileSystem(nil, root, btHost, 0, false)
 	if err != nil {
-		return 500, "metainfo creation failed"
+		return
 	}
 
 	metaInfo.Announce = "http://" + btHost + "/announce"
