@@ -225,11 +225,12 @@ func getImagesList(w http.ResponseWriter, r *http.Request) (int, string) {
 
 func createTorrentFile(torrentFileName, root, announcePath string) (err error) {
 	var metaInfo *torrent.MetaInfo
-	metaInfo, err = torrent.CreateMetaInfoFromFileSystem(nil, root, 0, false)
-	if err != nil {
-		return
-	}
 	btHost := *tracker
+	metaInfo, err = torrent.CreateMetaInfoFromFileSystem(nil, root, btHost, 0, false)
+	if err != nil {
+		return 500, "metainfo creation failed"
+	}
+
 	metaInfo.Announce = "http://" + btHost + "/announce"
 	metaInfo.CreatedBy = "docket-registry"
 	var torrentFile *os.File
