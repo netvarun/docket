@@ -20,7 +20,7 @@ As containers get more mainstream, server deployments are soon going to be done 
 
 Large scale deploys are going to choke your docker registry.
 Imagine pulling/deploying a 800mb base image (for example the official perl image) across 200 machines in one go.
-That's 800*200 = 1.6TB of data that's going to be deployed and it'll definitely choke your private docker registry (and will take a while pulling in from the public image)
+That's 800*200 = 160GB of data that's going to be deployed and it'll definitely choke your private docker registry (and will take a while pulling in from the public image)
 
 ## Solution
 
